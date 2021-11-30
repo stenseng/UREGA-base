@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+
+    timescaledb:
+        image: timescale/timescaledb:latest-pg12
+        user: postgres
+        environment:
+            - POSTGRES_PASSWORD=ShouldB3Secre1Ss0d0Something
+            - POSTGRES_DB=UREGA
+            - TIMESCALEDB_TELEMETRY=off
+            - PGDATA=/var/lib/postgresql/data/pgdata
+            # - TS_TUNE_NUM_CPUS=4
+            # - TS_TUNE_MEMORY=4GB
+            # - TS_TUNE_MAX_CONNS=200
+        ports:
+            - "5432:5432"
+        volumes:
+            - ./initdb/01-rtcm_packages.sql:/docker-entrypoint-initdb.d/
+            - ./initdb/02-gnss_observations.sql:/docker-entrypoint-initdb.d/
+#            - /local/persistentdb:/var/lib/postgresql/data
+        restart: unless-stopped
+
+    grafana:
+        image: grafana/grafana
+            # environment:
+            #     - GF_INSTALL_PLUGINS=
+        environment:
+            - GF_SECURITY_ADMIN_USER=admin
+            - GF_SECURITY_ADMIN_PASSWORD=Ev3nM0reSecretYouKn0w
+            - GF_USERS_ALLOW_SIGN_UP=false
+        depends_on:
+            - timescaledb
+        ports:
+            - "3002:3002"
+        volumes:
+            - /local/jenkins/ntripcaster/data/grafana:/var/lib/grafana
+        restart: unless-stopped
+
+    ingest:
+        build: Dockerfile_ingest
+        depends_on:
+            - timescaledb
+        restart: unless-stopped
