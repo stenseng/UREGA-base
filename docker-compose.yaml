@@ -16,8 +16,9 @@ services:
         ports:
             - "5432:5432"
         volumes:
-            - ./initdb/01-rtcm_packages.sql:/docker-entrypoint-initdb.d/
-            - ./initdb/02-gnss_observations.sql:/docker-entrypoint-initdb.d/
+#            - ./initdb:/docker-entrypoint-initdb.d
+            - ./initdb/01-rtcm_packages.sql:/docker-entrypoint-initdb.d/01-rtcm_packages.sql
+            - ./initdb/02-gnss_observations.sql:/docker-entrypoint-initdb.d/02-gnss_observations.sql
 #            - /local/persistentdb:/var/lib/postgresql/data
         restart: unless-stopped
 
@@ -32,13 +33,15 @@ services:
         depends_on:
             - timescaledb
         ports:
-            - "3002:3002"
-        volumes:
-            - /local/jenkins/ntripcaster/data/grafana:/var/lib/grafana
+            - "3000:3000"
+#        volumes:
+#            - /local/jenkins/ntripcaster/data/grafana:/var/lib/grafana
         restart: unless-stopped
 
     ingest:
-        build: Dockerfile_ingest
+        build:
+          context: .
+          dockerfile: Dockerfile-ingest
         depends_on:
             - timescaledb
         restart: unless-stopped

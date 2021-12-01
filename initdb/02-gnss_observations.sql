@@ -11,6 +11,6 @@ CREATE TABLE IF NOT EXISTS gnss_observations (
   obs_doppler NUMERIC(8, 4),
   obs_snr NUMERIC(6, 4)
 );
-SELECT create_hypertable('gnss_observations', 'obs_time', 'mountpoint', 2);
-CREATE INDEX ON gnss_observations(‘mountpoint’, ‘sat_id’, ‘sat_signal’, ‘obs_epoch’ DESC);
-CREATE INDEX ON gnss_observations(‘mountpoint’, ‘rtcm_msg_type’, ‘obs_epoch’ DESC);
+SELECT create_hypertable('gnss_observations', 'obs_epoch', 'mountpoint', 2);
+CREATE INDEX ON gnss_observations(mountpoint, sat_id, sat_signal, obs_epoch DESC);
+CREATE INDEX ON gnss_observations(mountpoint, rtcm_msg_type, obs_epoch DESC);
