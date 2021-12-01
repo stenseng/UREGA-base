@@ -103,6 +103,7 @@ async def procRtcmStream(
         messageSize = len(rtcmFrame)
         obsEpoch = None
         satCount = None
+        rtcmPackageId = None
         if (
             (messageType >= 1001 and messageType <= 1004)
             or (messageType >= 1009 and messageType <= 1012)
@@ -129,7 +130,8 @@ async def procRtcmStream(
                 dbCursor.execute(
                     "INSERT INTO rtcm_packages"
                     "(receive_time, mountpoint, rtcm_obs_epoch, rtcm_msg_type, "
-                    "rtcm_msg_size, rtcm_sat_count) VALUES (%s, %s, %s, %s, %s, %s)",
+                    "rtcm_msg_size, rtcm_sat_count) VALUES (%s, %s, %s, %s, %s, %s) "
+                    "RETURNING rtcm_package_id",
                     (
                         timeStampStr,
                         mountPoint,
@@ -140,6 +142,8 @@ async def procRtcmStream(
                     )
                 )
                 dbConnection.commit()
+                rtcmPackageId = dbCursor.fetchone()[0]
+                logging.debug(rtcmPackageId)
             except (Exception, Error) as error:
                 logging.error(
                     f"Failed to insert and commit data to databse with: {error}"
@@ -148,6 +152,47 @@ async def procRtcmStream(
                     f" Data values is: {timeStampStr}, {mountPoint}, {obsEpoch}, "
                     f"{messageType}, {messageSize}"
                 )
+            if (
+                (messageType >= 1001 and messageType <= 1004)
+                or (messageType >= 1009 and messageType <= 1012)
+                or (messageType >= 1071 and messageType <= 1077)
+                or (messageType >= 1081 and messageType <= 1087)
+                or (messageType >= 1091 and messageType <= 1097)
+                or (messageType >= 1101 and messageType <= 1107)
+                or (messageType >= 1111 and messageType <= 1117)
+                or (messageType >= 1121 and messageType <= 1127)
+            ):
+                obsEpochStr = strftime(
+                    f"%Y-%m-%d %H:%M:%S.{us}", gmtime(timeStamp)
+                )
+                try:
+                    dbCursor.execute(
+                        "INSERT INTO rtcm_packages"
+                        "(rtcm_package_id, mountpoint, obs_epoch, rtcm_msg_type, "
+                        "sat_id, sat_signal, obs_code, obs_phase, obs_doppler, obs_snr) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ",
+                        (
+                            rtcmPackageId,
+                            mountPoint,
+                            obsEpochStr,
+                            messageType,
+                            satId,
+                            satSignal,
+                            obsCode,
+                            obsPhase,
+                            obsDoppler,
+                            obsSnr
+                        )
+                    )
+                    dbConnection.commit()
+                except (Exception, Error) as error:
+                    logging.error(
+                        f"Failed to insert and commit data to databse with: {error}"
+                    )
+                    logging.error(
+                        f" Data values is: {timeStampStr}, {mountPoint}, {obsEpoch}, "
+                        f"{messageType}, {messageSize}"
+                    )
         logging.debug(
             f"{mountPoint} "
             f"{timeStamp} "
