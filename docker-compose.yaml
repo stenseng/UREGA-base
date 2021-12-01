@@ -16,10 +16,14 @@ services:
         ports:
             - "5432:5432"
         volumes:
-#            - ./initdb:/docker-entrypoint-initdb.d
             - ./initdb/01-rtcm_packages.sql:/docker-entrypoint-initdb.d/01-rtcm_packages.sql
             - ./initdb/02-gnss_observations.sql:/docker-entrypoint-initdb.d/02-gnss_observations.sql
 #            - /local/persistentdb:/var/lib/postgresql/data
+        logging:
+            driver: "local"
+            options:
+                max-file: 10
+                max-size: 10
         restart: unless-stopped
 
     grafana:
@@ -35,7 +39,12 @@ services:
         ports:
             - "3000:3000"
 #        volumes:
-#            - /local/jenkins/ntripcaster/data/grafana:/var/lib/grafana
+#            - /local/grafana:/var/lib/grafana
+        logging:
+            driver: "local"
+            options:
+                max-file: 10
+                max-size: 10
         restart: unless-stopped
 
     ingest:
@@ -44,4 +53,9 @@ services:
           dockerfile: Dockerfile-ingest
         depends_on:
             - timescaledb
+        logging:
+            driver: "local"
+            options:
+                max-file: 10
+                max-size: 10
         restart: unless-stopped
