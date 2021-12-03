@@ -38,7 +38,8 @@ services:
             - timescaledb
         ports:
             - "3000:3000"
-#        volumes:
+        volumes:
+            - initgrafana:/etc/grafana/provisioning
 #            - /local/grafana:/var/lib/grafana
         logging:
             driver: "local"

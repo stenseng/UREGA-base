@@ -9,11 +9,11 @@ import argparse
 import asyncio
 import logging
 from signal import SIGINT, SIGTERM, signal
-from time import strftime, gmtime
+from time import gmtime, strftime
 
 from ntripstreams import NtripStream, Rtcm3
-from psycopg2 import connect, Error
-from settings import DbSettings, CasterSettings
+from psycopg2 import Error, connect
+from settings import CasterSettings, DbSettings
 
 
 def procSigint(signum, frame):
@@ -137,7 +137,7 @@ async def procRtcmStream(
                         messageType,
                         messageSize,
                         satCount,
-                    )
+                    ),
                 )
                 dbConnection.commit()
                 rtcmPackageId = dbCursor.fetchone()[0]
@@ -207,7 +207,7 @@ async def rtcmStreamTasks(casterSettings, dbConnection):
                 mountpoint,
                 dbConnection,
             ),
-            name=mountpoint
+            name=mountpoint,
         )
     for mountpoint in casterSettings.mountpoints:
         await tasks[mountpoint]
@@ -264,13 +264,22 @@ if __name__ == "__main__":
         help="Name of mountpoint without leading / (e.g. PNT1).",
     )
     parser.add_argument(
-        "-1", "--ntrip1", action="store_true", help="Use Ntrip 1 protocol.",
+        "-1",
+        "--ntrip1",
+        action="store_true",
+        help="Use Ntrip 1 protocol.",
     )
     parser.add_argument(
-        "-l", "--logfile", help="Log to file. Default output is terminal.",
+        "-l",
+        "--logfile",
+        help="Log to file. Default output is terminal.",
     )
     parser.add_argument(
-        "-v", "--verbosity", action="count", default=0, help="Increase verbosity level.",
+        "-v",
+        "--verbosity",
+        action="count",
+        default=0,
+        help="Increase verbosity level.",
     )
     args = parser.parse_args()
 
