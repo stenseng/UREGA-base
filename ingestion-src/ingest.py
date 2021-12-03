@@ -8,11 +8,11 @@
 import argparse
 import asyncio
 import logging
-from psycopg2 import connect, Error
-from ntripstreams import NtripStream, Rtcm3
 from signal import SIGINT, SIGTERM, signal
 from time import strftime, gmtime
 
+from ntripstreams import NtripStream, Rtcm3
+from psycopg2 import connect, Error
 from settings import DbSettings, CasterSettings
 
 
@@ -35,7 +35,7 @@ async def procRtcmStream(
     mountPoint: str,
     dbSettings: DbSettings = None,
     fail: int = 0,
-    retry: int = 3
+    retry: int = 3,
 ):
     dbConnection = None
     ntripstream = NtripStream()
@@ -45,7 +45,7 @@ async def procRtcmStream(
             casterSettings.casterUrl,
             mountPoint,
             casterSettings.user,
-            casterSettings.password
+            casterSettings.password,
         )
     except (OSError):
         sleepTime = 30
@@ -123,9 +123,7 @@ async def procRtcmStream(
                 obsEpoch = data[0][2] / 1000.0
         if dbConnection:
             us = int(timeStamp % 1 * 1000000)
-            timeStampStr = strftime(
-                f"%Y-%m-%d %H:%M:%S.{us}", gmtime(timeStamp)
-            )
+            timeStampStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(timeStamp))
             try:
                 dbCursor.execute(
                     "INSERT INTO rtcm_packages"
@@ -138,7 +136,7 @@ async def procRtcmStream(
                         obsEpoch,
                         messageType,
                         messageSize,
-                        satCount
+                        satCount,
                     )
                 )
                 dbConnection.commit()
@@ -162,9 +160,7 @@ async def procRtcmStream(
 #                or (messageType >= 1111 and messageType <= 1117)
 #                or (messageType >= 1121 and messageType <= 1127)
 #            ):
-#                obsEpochStr = strftime(
-#                    f"%Y-%m-%d %H:%M:%S.{us}", gmtime(timeStamp)
-#                )
+#                obsEpochStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(timeStamp))
 #                try:
 #                    dbCursor.execute(
 #                        "INSERT INTO rtcm_packages"
@@ -181,7 +177,7 @@ async def procRtcmStream(
 #                            obsCode,
 #                            obsPhase,
 #                            obsDoppler,
-#                            obsSnr
+#                            obsSnr,
 #                        )
 #                    )
 #                    dbConnection.commit()
@@ -206,7 +202,12 @@ async def rtcmStreamTasks(casterSettings, dbConnection):
     tasks = {}
     for mountpoint in casterSettings.mountpoints:
         tasks[mountpoint] = asyncio.create_task(
-            procRtcmStream(casterSettings, mountpoint, dbConnection,), name=mountpoint
+            procRtcmStream(
+                casterSettings,
+                mountpoint,
+                dbConnection,
+            ),
+            name=mountpoint
         )
     for mountpoint in casterSettings.mountpoints:
         await tasks[mountpoint]
@@ -243,8 +244,8 @@ def dbConnect(dbSettings):
         password=dbSettings.password,
         host=dbSettings.host,
         port=dbSettings.port,
-        database=dbSettings.database
-        )
+        database=dbSettings.database,
+    )
     return connection
 
 
@@ -254,22 +255,22 @@ if __name__ == "__main__":
         "-c",
         "--check",
         action="store_true",
-        help="Check connection to Ntripcaster without committing data to database."
+        help="Check connection to Ntripcaster without committing data to database.",
     )
     parser.add_argument(
         "-m",
         "--mountpoint",
         action="append",
-        help="Name of mountpoint without leading / (e.g. PNT1)."
+        help="Name of mountpoint without leading / (e.g. PNT1).",
     )
     parser.add_argument(
-        "-1", "--ntrip1", action="store_true", help="Use Ntrip 1 protocol."
+        "-1", "--ntrip1", action="store_true", help="Use Ntrip 1 protocol.",
     )
     parser.add_argument(
-        "-l", "--logfile", help="Log to file. Default output is terminal."
+        "-l", "--logfile", help="Log to file. Default output is terminal.",
     )
     parser.add_argument(
-        "-v", "--verbosity", action="count", default=0, help="Increase verbosity level."
+        "-v", "--verbosity", action="count", default=0, help="Increase verbosity level.",
     )
     args = parser.parse_args()
 
