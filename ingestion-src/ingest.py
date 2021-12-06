@@ -30,6 +30,126 @@ signal(SIGINT, procSigint)
 signal(SIGTERM, procSigterm)
 
 
+def dbInsert(dbCursor, mountPoint, timeStamp, messageSize, messageType, data):
+    us = int(timeStamp % 1 * 1000000)
+    timeStampStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(timeStamp))
+    if (
+        (messageType >= 1001 and messageType <= 1004)
+        or (messageType >= 1009 and messageType <= 1012)
+        or (messageType >= 1071 and messageType <= 1077)
+        or (messageType >= 1081 and messageType <= 1087)
+        or (messageType >= 1091 and messageType <= 1097)
+        or (messageType >= 1101 and messageType <= 1107)
+        or (messageType >= 1111 and messageType <= 1117)
+        or (messageType >= 1121 and messageType <= 1127)
+    ):
+        satCount = len(data[1])
+        if messageType >= 1001 and messageType <= 1004:
+            obsEpoch = data[0][2] / 1000.0
+        elif messageType >= 1009 and messageType <= 1012:
+            obsEpoch = data[0][2] / 1000.0
+        elif messageType >= 1071 and messageType <= 1127:
+            obsEpoch = data[0][2] / 1000.0
+        rtcmPackageId = dbInsertRtcmInfo(
+            dbCursor,
+            mountPoint,
+            timeStampStr,
+            messageType,
+            messageSize,
+            obsEpoch,
+            satCount,
+        )
+        dbInsertGnssObs(dbCursor, mountPoint, rtcmPackageId, messageType, data)
+    else:
+        rtcmPackageId = dbInsertRtcmInfo(
+            dbCursor,
+            timeStampStr,
+            mountPoint,
+            messageType,
+            messageSize,
+        )
+    logging.debug(
+        f"{mountPoint} "
+        f"{timeStamp} "
+        f"#:{messageType} "
+        f"Size: {messageSize} "
+        f"Epoch: {obsEpoch} "
+        f"Sat. count: {satCount}"
+    )
+
+    return
+
+
+def dbInsertRtcmInfo(
+    dbCursor,
+    mountPoint: str,
+    timeStampStr: str,
+    messageType: int,
+    messageSize: int,
+    obsEpoch: float=None,
+    satCount: int=None,
+):
+    rtcmPackageId = None
+    try:
+        dbCursor.execute(
+            "INSERT INTO rtcm_packages"
+            "(receive_time, mountpoint, rtcm_obs_epoch, rtcm_msg_type, "
+            "rtcm_msg_size, rtcm_sat_count) VALUES (%s, %s, %s, %s, %s, %s) "
+            "RETURNING rtcm_package_id",
+            (
+                timeStampStr,
+                mountPoint,
+                obsEpoch,
+                messageType,
+                messageSize,
+                satCount,
+            ),
+        )
+        rtcmPackageId = dbCursor.fetchone()[0]
+        logging.debug(f"Inserted package with id: {rtcmPackageId} into database.")
+    except (Exception, Error) as error:
+        logging.error(
+            f"Failed to insert and commit data to databse with: {error}"
+            f" Data values is: {timeStampStr}, {mountPoint}, {obsEpoch}, "
+            f"{messageType}, {messageSize}"
+        )
+    return rtcmPackageId
+
+def dbInsertGnssObs(dbCursor, mountPoint, rtcmPackageId, messageType, data):
+    obsEpoch = data[0][2] / 1000.0
+    us = int(obsEpoch % 1 * 1000000)
+    obsEpochStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(obsEpoch))
+    satType = data[0][2]
+    for sat in data[1]:
+        satId = f"{sat[0]}"
+        satSignal = data[0][10][0]
+        obsCode = 10000.0
+        obsPhase = 1000.0
+        obsDoppler = 100.0
+        obsSnr = 10.0
+        try:
+            dbCursor.execute(
+                "INSERT INTO gnss_observations"
+                "(rtcm_package_id, mountpoint, obs_epoch, rtcm_msg_type, "
+                "sat_id, sat_signal, obs_code, obs_phase, obs_doppler, obs_snr) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ",
+                (
+                    rtcmPackageId,
+                    mountPoint,
+                    obsEpochStr,
+                    messageType,
+                    satId,
+                    satSignal,
+                    obsCode,
+                    obsPhase,
+                    obsDoppler,
+                    obsSnr,
+                )
+            )
+        except (Exception, Error) as error:
+            logging.error(f"Failed to insert and commit data to databse with: {error}")
+
+
 async def procRtcmStream(
     casterSettings: CasterSettings,
     mountPoint: str,
@@ -95,61 +215,62 @@ async def procRtcmStream(
         fail = 0
         try:
             messageType, data = rtcmMessage.decodeRtcmFrame(rtcmFrame)
-            description = rtcmMessage.messageDescription(messageType)
         except Exception:
             logging.info("Failed to decode RTCM frame.")
             break
-        logging.debug(f"{mountPoint}: RTCM message #: {messageType} '{description}'.")
-        messageSize = len(rtcmFrame)
-        obsEpoch = None
-        satCount = None
-        rtcmPackageId = None
-        if (
-            (messageType >= 1001 and messageType <= 1004)
-            or (messageType >= 1009 and messageType <= 1012)
-            or (messageType >= 1071 and messageType <= 1077)
-            or (messageType >= 1081 and messageType <= 1087)
-            or (messageType >= 1091 and messageType <= 1097)
-            or (messageType >= 1101 and messageType <= 1107)
-            or (messageType >= 1111 and messageType <= 1117)
-            or (messageType >= 1121 and messageType <= 1127)
-        ):
-            satCount = len(data[1])
-            if messageType >= 1001 and messageType <= 1004:
-                obsEpoch = data[0][2] / 1000.0
-            elif messageType >= 1009 and messageType <= 1012:
-                obsEpoch = data[0][2] / 1000.0
-            elif messageType >= 1071 and messageType <= 1127:
-                obsEpoch = data[0][2] / 1000.0
-        if dbConnection:
-            us = int(timeStamp % 1 * 1000000)
-            timeStampStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(timeStamp))
-            try:
-                dbCursor.execute(
-                    "INSERT INTO rtcm_packages"
-                    "(receive_time, mountpoint, rtcm_obs_epoch, rtcm_msg_type, "
-                    "rtcm_msg_size, rtcm_sat_count) VALUES (%s, %s, %s, %s, %s, %s) "
-                    "RETURNING rtcm_package_id",
-                    (
-                        timeStampStr,
-                        mountPoint,
-                        obsEpoch,
-                        messageType,
-                        messageSize,
-                        satCount,
-                    ),
-                )
-                dbConnection.commit()
-                rtcmPackageId = dbCursor.fetchone()[0]
-                logging.debug(rtcmPackageId)
-            except (Exception, Error) as error:
-                logging.error(
-                    f"Failed to insert and commit data to databse with: {error}"
-                )
-                logging.error(
-                    f" Data values is: {timeStampStr}, {mountPoint}, {obsEpoch}, "
-                    f"{messageType}, {messageSize}"
-                )
+        logging.debug(
+            f"{mountPoint}: RTCM message #: {messageType}"
+            f" '{rtcmMessage.messageDescription(messageType)}'."
+        )
+        dbInsert(dbCursor, mountPoint, timeStamp, len(rtcmFrame), messageType, data)
+#        messageSize = len(rtcmFrame)
+#        obsEpoch = None
+#        satCount = None
+#        rtcmPackageId = None
+#        if (
+#            (messageType >= 1001 and messageType <= 1004)
+#            or (messageType >= 1009 and messageType <= 1012)
+#            or (messageType >= 1071 and messageType <= 1077)
+#            or (messageType >= 1081 and messageType <= 1087)
+#            or (messageType >= 1091 and messageType <= 1097)
+#            or (messageType >= 1101 and messageType <= 1107)
+#            or (messageType >= 1111 and messageType <= 1117)
+#            or (messageType >= 1121 and messageType <= 1127)
+#        ):
+#            satCount = len(data[1])
+#            if messageType >= 1001 and messageType <= 1004:
+#                obsEpoch = data[0][2] / 1000.0
+#            elif messageType >= 1009 and messageType <= 1012:
+#                obsEpoch = data[0][2] / 1000.0
+#            elif messageType >= 1071 and messageType <= 1127:
+#                obsEpoch = data[0][2] / 1000.0
+#        if dbConnection:
+#            us = int(timeStamp % 1 * 1000000)
+#            timeStampStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(timeStamp))
+#            try:
+#                dbCursor.execute(
+#                    "INSERT INTO rtcm_packages"
+#                    "(receive_time, mountpoint, rtcm_obs_epoch, rtcm_msg_type, "
+#                    "rtcm_msg_size, rtcm_sat_count) VALUES (%s, %s, %s, %s, %s, %s) "
+#                    "RETURNING rtcm_package_id",
+#                    (
+#                        timeStampStr,
+#                        mountPoint,
+#                        obsEpoch,
+#                        messageType,
+#                        messageSize,
+#                        satCount,
+#                    ),
+#                )
+#                dbConnection.commit()
+#                rtcmPackageId = dbCursor.fetchone()[0]
+#                logging.debug(f"Inserted package wit id: {rtcmPackageId} into database.")
+#            except (Exception, Error) as error:
+#                logging.error(
+#                    f"Failed to insert and commit data to databse with: {error}"
+#                    f" Data values is: {timeStampStr}, {mountPoint}, {obsEpoch}, "
+#                    f"{messageType}, {messageSize}"
+#                )
 #            if (
 #                (messageType >= 1001 and messageType <= 1004)
 #                or (messageType >= 1009 and messageType <= 1012)
@@ -185,14 +306,7 @@ async def procRtcmStream(
 #                    logging.error(
 #                        f"Failed to insert and commit data to databse with: {error}"
 #                    )
-        logging.debug(
-            f"{mountPoint} "
-            f"{timeStamp} "
-            f"#:{messageType} "
-            f"Size: {messageSize} "
-            f"Epoch: {obsEpoch} "
-            f"Sat. count: {satCount}"
-        )
+#        )
     if dbConnection:
         dbCursor.close()
         dbConnection.close()
@@ -238,7 +352,7 @@ async def getMountpoints(
         return mountpoints
 
 
-def dbConnect(dbSettings):
+def dbConnect(dbSettings: DbSettings):
     connection = connect(
         user=dbSettings.user,
         password=dbSettings.password,
@@ -246,6 +360,7 @@ def dbConnect(dbSettings):
         port=dbSettings.port,
         database=dbSettings.database,
     )
+    connection.autocommit = True
     return connection
 
 
