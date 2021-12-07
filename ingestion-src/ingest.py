@@ -8,7 +8,9 @@
 import argparse
 import asyncio
 import logging
+from math import pow
 from signal import SIGINT, SIGTERM, signal
+from sys import exit
 from time import gmtime, strftime
 
 from ntripstreams import NtripStream, Rtcm3
@@ -63,20 +65,11 @@ def dbInsert(dbCursor, mountPoint, timeStamp, messageSize, messageType, data):
     else:
         rtcmPackageId = dbInsertRtcmInfo(
             dbCursor,
-            timeStampStr,
             mountPoint,
+            timeStampStr,
             messageType,
             messageSize,
         )
-    logging.debug(
-        f"{mountPoint} "
-        f"{timeStamp} "
-        f"#:{messageType} "
-        f"Size: {messageSize} "
-        f"Epoch: {obsEpoch} "
-        f"Sat. count: {satCount}"
-    )
-
     return
 
 
@@ -86,19 +79,19 @@ def dbInsertRtcmInfo(
     timeStampStr: str,
     messageType: int,
     messageSize: int,
-    obsEpoch: float=None,
-    satCount: int=None,
+    obsEpoch: float = None,
+    satCount: int = None,
 ):
     rtcmPackageId = None
     try:
         dbCursor.execute(
             "INSERT INTO rtcm_packages"
-            "(receive_time, mountpoint, rtcm_obs_epoch, rtcm_msg_type, "
+            "(mountpoint, receive_time, rtcm_obs_epoch, rtcm_msg_type, "
             "rtcm_msg_size, rtcm_sat_count) VALUES (%s, %s, %s, %s, %s, %s) "
             "RETURNING rtcm_package_id",
             (
-                timeStampStr,
                 mountPoint,
+                timeStampStr,
                 obsEpoch,
                 messageType,
                 messageSize,
@@ -115,39 +108,98 @@ def dbInsertRtcmInfo(
         )
     return rtcmPackageId
 
+
 def dbInsertGnssObs(dbCursor, mountPoint, rtcmPackageId, messageType, data):
+    rtcmData = Rtcm3()
+    if (messageType >= 1001 and messageType <= 1004) or (
+        messageType >= 1071 and messageType <= 1077
+    ):
+        satType = "G"
+    elif (messageType >= 1009 and messageType <= 1004) or (
+        messageType >= 1081 and messageType <= 1087
+    ):
+        satType = "R"
+    elif messageType >= 1091 and messageType <= 1097:
+        satType = "E"
+    elif messageType >= 1101 and messageType <= 1107:
+        satType = "S"
+    elif messageType >= 1111 and messageType <= 1117:
+        satType = "J"
+    elif messageType >= 1121 and messageType <= 1127:
+        satType = "C"
+
+    if messageType >= 1071 and messageType <= 1127:
+        if messageType % 10 == 5:
+            codeFineScaling = pow(2, -24)
+            phaseFineScaling = pow(2, -29)
+        elif messageType % 10 == 7:
+            codeFineScaling = pow(2, -29)
+            phaseFineScaling = pow(2, -31)
+
     obsEpoch = data[0][2] / 1000.0
     us = int(obsEpoch % 1 * 1000000)
     obsEpochStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(obsEpoch))
-    satType = data[0][2]
-    for sat in data[1]:
-        satId = f"{sat[0]}"
-        satSignal = data[0][10][0]
-        obsCode = 10000.0
-        obsPhase = 1000.0
-        obsDoppler = 100.0
-        obsSnr = 10.0
-        try:
-            dbCursor.execute(
-                "INSERT INTO gnss_observations"
-                "(rtcm_package_id, mountpoint, obs_epoch, rtcm_msg_type, "
-                "sat_id, sat_signal, obs_code, obs_phase, obs_doppler, obs_snr) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ",
-                (
-                    rtcmPackageId,
-                    mountPoint,
-                    obsEpochStr,
-                    messageType,
-                    satId,
-                    satSignal,
-                    obsCode,
-                    obsPhase,
-                    obsDoppler,
-                    obsSnr,
+    satSignals = rtcmData.msmSignalTypes(messageType, data[0][10])
+    satCount = len(data[1])
+    signalCount = len(satSignals)
+    availObsNo = 0
+    availObsMask = str(data[0][11])
+    for satNo, sat in enumerate(data[1]):
+        satRoughRange = sat[0] + sat[2] / 1024.0
+        satRoughRangeRate = sat[3]
+        for signalNo, satSignal in enumerate(satSignals):
+            if availObsMask[satNo * signalCount + signalNo] == "1":
+                print(
+                    f"messageType {messageType}: {data[0][11]} "
+                    f"{availObsNo} {satNo} {signalNo} "
+                    f"{len(data[2][availObsNo])} "
                 )
-            )
-        except (Exception, Error) as error:
-            logging.error(f"Failed to insert and commit data to databse with: {error}")
+                availObsNo += 1
+            satId = f"{satType}{satNo}"
+            # # obsCode = satRoughRange + data[2][satNo][signalNo][0] * codeFineScaling
+            # # obsPhase = satRoughRange + data[2][satNo][signalNo][1] * phaseFineScaling
+            # # obsDoppler = satRoughRangeRate + data[2][satNo][signalNo][5]
+            # # obsSnr = data[2][satNo][signalNo][4]
+            # obsCode = data[2][availObsNo][0]
+            # obsPhase = (
+            #     f"{len(data[2])} {len(data[2][satNo])} {data[2][satNo][availObsNo]}"
+            # )
+            # obsDoppler = data[0][-1]
+            # obsSnr = obsCode
+            # print(
+            #     f"rtcmPackageId:{rtcmPackageId},"
+            #     f"mountPoint:{mountPoint},"
+            #     f"obsEpochStr:{obsEpochStr},"
+            #     f"messageType:{messageType},"
+            #     f"satId:{satId},"
+            #     f"satSignal:{satSignal},"
+            #     f"obsCode:{obsCode},"
+            #     f"obsPhase:{obsPhase},"
+            #     f"obsDoppler:{obsDoppler},"
+            #     f"obsSnr:{obsSnr}"
+            # )
+            # availObsNo += 1
+        # try:
+        #     dbCursor.execute(
+        #         "INSERT INTO gnss_observations"
+        #         "(rtcm_package_id, mountpoint, obs_epoch, rtcm_msg_type, "
+        #         "sat_id, sat_signal, obs_code, obs_phase, obs_doppler, obs_snr) "
+        #         "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ",
+        #         (
+        #             rtcmPackageId,
+        #             mountPoint,
+        #             obsEpochStr,
+        #             messageType,
+        #             satId,
+        #             satSignal,
+        #             obsCode,
+        #             obsPhase,
+        #             obsDoppler,
+        #             obsSnr,
+        #         )
+        #     )
+        # except (Exception, Error) as error:
+        #     logging.error(f"Failed to insert and commit data to databse with: {error}")
 
 
 async def procRtcmStream(
@@ -223,90 +275,6 @@ async def procRtcmStream(
             f" '{rtcmMessage.messageDescription(messageType)}'."
         )
         dbInsert(dbCursor, mountPoint, timeStamp, len(rtcmFrame), messageType, data)
-#        messageSize = len(rtcmFrame)
-#        obsEpoch = None
-#        satCount = None
-#        rtcmPackageId = None
-#        if (
-#            (messageType >= 1001 and messageType <= 1004)
-#            or (messageType >= 1009 and messageType <= 1012)
-#            or (messageType >= 1071 and messageType <= 1077)
-#            or (messageType >= 1081 and messageType <= 1087)
-#            or (messageType >= 1091 and messageType <= 1097)
-#            or (messageType >= 1101 and messageType <= 1107)
-#            or (messageType >= 1111 and messageType <= 1117)
-#            or (messageType >= 1121 and messageType <= 1127)
-#        ):
-#            satCount = len(data[1])
-#            if messageType >= 1001 and messageType <= 1004:
-#                obsEpoch = data[0][2] / 1000.0
-#            elif messageType >= 1009 and messageType <= 1012:
-#                obsEpoch = data[0][2] / 1000.0
-#            elif messageType >= 1071 and messageType <= 1127:
-#                obsEpoch = data[0][2] / 1000.0
-#        if dbConnection:
-#            us = int(timeStamp % 1 * 1000000)
-#            timeStampStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(timeStamp))
-#            try:
-#                dbCursor.execute(
-#                    "INSERT INTO rtcm_packages"
-#                    "(receive_time, mountpoint, rtcm_obs_epoch, rtcm_msg_type, "
-#                    "rtcm_msg_size, rtcm_sat_count) VALUES (%s, %s, %s, %s, %s, %s) "
-#                    "RETURNING rtcm_package_id",
-#                    (
-#                        timeStampStr,
-#                        mountPoint,
-#                        obsEpoch,
-#                        messageType,
-#                        messageSize,
-#                        satCount,
-#                    ),
-#                )
-#                dbConnection.commit()
-#                rtcmPackageId = dbCursor.fetchone()[0]
-#                logging.debug(f"Inserted package wit id: {rtcmPackageId} into database.")
-#            except (Exception, Error) as error:
-#                logging.error(
-#                    f"Failed to insert and commit data to databse with: {error}"
-#                    f" Data values is: {timeStampStr}, {mountPoint}, {obsEpoch}, "
-#                    f"{messageType}, {messageSize}"
-#                )
-#            if (
-#                (messageType >= 1001 and messageType <= 1004)
-#                or (messageType >= 1009 and messageType <= 1012)
-#                or (messageType >= 1071 and messageType <= 1077)
-#                or (messageType >= 1081 and messageType <= 1087)
-#                or (messageType >= 1091 and messageType <= 1097)
-#                or (messageType >= 1101 and messageType <= 1107)
-#                or (messageType >= 1111 and messageType <= 1117)
-#                or (messageType >= 1121 and messageType <= 1127)
-#            ):
-#                obsEpochStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(timeStamp))
-#                try:
-#                    dbCursor.execute(
-#                        "INSERT INTO rtcm_packages"
-#                        "(rtcm_package_id, mountpoint, obs_epoch, rtcm_msg_type, "
-#                        "sat_id, sat_signal, obs_code, obs_phase, obs_doppler, obs_snr) "
-#                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ",
-#                        (
-#                            rtcmPackageId,
-#                            mountPoint,
-#                            obsEpochStr,
-#                            messageType,
-#                            satId,
-#                            satSignal,
-#                            obsCode,
-#                            obsPhase,
-#                            obsDoppler,
-#                            obsSnr,
-#                        )
-#                    )
-#                    dbConnection.commit()
-#                except (Exception, Error) as error:
-#                    logging.error(
-#                        f"Failed to insert and commit data to databse with: {error}"
-#                    )
-#        )
     if dbConnection:
         dbCursor.close()
         dbConnection.close()

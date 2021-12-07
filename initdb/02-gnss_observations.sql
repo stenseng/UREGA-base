@@ -6,8 +6,8 @@ CREATE TABLE IF NOT EXISTS gnss_observations (
     mountpoint varchar(50),
     sat_id char(4),
     sat_signal char(3),
-    obs_code NUMERIC(10, 3),
-    obs_phase NUMERIC(10, 3),
+    obs_code NUMERIC(13, 10),
+    obs_phase NUMERIC(14, 11),
     obs_doppler NUMERIC(8, 4),
     obs_snr NUMERIC(6, 4)
 );
