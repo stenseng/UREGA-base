@@ -13,7 +13,7 @@ import logging
 from math import pow
 from signal import SIGINT, SIGTERM, signal
 from sys import exit
-from time import gmtime, strftime
+from time import gmtime, strftime, time
 
 from ntripstreams import NtripStream, Rtcm3
 from psycopg2 import Error, connect, extras
@@ -34,6 +34,24 @@ signal(SIGINT, procSigint)
 signal(SIGTERM, procSigterm)
 
 
+def gnssEpochStr(messageType: int, obsEpoch: float):
+    now = time()
+    nowSecOfDay = now % 86400
+    if (messageType >= 1009 and messageType <= 1012) or (
+        messageType >= 1081 and messageType <= 1087
+    ):
+        deltaTime = obsEpoch - nowSecOfDay - 3 * 3600
+    else:
+        deltaTime = obsEpoch % 86400 - nowSecOfDay
+    if deltaTime < 0:
+        obsTime = now + 86400 + deltaTime
+    else:
+        obsTime = now + deltaTime
+    us = int(obsEpoch % 1 * 1000000)
+    epochStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(obsTime))
+    return epochStr
+
+
 def dbInsert(dbCursor, mountPoint, timeStamp, messageSize, messageType, data):
     us = int(timeStamp % 1 * 1000000)
     timeStampStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(timeStamp))
@@ -48,19 +66,14 @@ def dbInsert(dbCursor, mountPoint, timeStamp, messageSize, messageType, data):
         or (messageType >= 1121 and messageType <= 1127)
     ):
         satCount = len(data[1])
-        if messageType >= 1001 and messageType <= 1004:
-            obsEpoch = data[0][2] / 1000.0
-        elif messageType >= 1009 and messageType <= 1012:
-            obsEpoch = data[0][2] / 1000.0
-        elif messageType >= 1071 and messageType <= 1127:
-            obsEpoch = data[0][2] / 1000.0
+        obsEpochStr = gnssEpochStr(messageType, data[0][2] / 1000.0)
         rtcmPackageId = dbInsertRtcmInfo(
             dbCursor,
             mountPoint,
             timeStampStr,
             messageType,
             messageSize,
-            obsEpoch,
+            obsEpochStr,
             satCount,
         )
         dbInsertGnssObs(dbCursor, mountPoint, rtcmPackageId, messageType, data)
@@ -81,7 +94,7 @@ def dbInsertRtcmInfo(
     timeStampStr: str,
     messageType: int,
     messageSize: int,
-    obsEpoch: float = None,
+    obsEpochStr: str = None,
     satCount: int = None,
 ):
     rtcmPackageId = None
@@ -94,7 +107,7 @@ def dbInsertRtcmInfo(
             (
                 mountPoint,
                 timeStampStr,
-                obsEpoch,
+                obsEpochStr,
                 messageType,
                 messageSize,
                 satCount,
@@ -105,7 +118,7 @@ def dbInsertRtcmInfo(
     except (Exception, Error) as error:
         logging.error(
             f"Failed to insert and commit data to databse with: {error}"
-            f" Data values is: {timeStampStr}, {mountPoint}, {obsEpoch}, "
+            f" Data values is: {timeStampStr}, {mountPoint}, {obsEpochStr}, "
             f"{messageType}, {messageSize}"
         )
     return rtcmPackageId
@@ -117,7 +130,7 @@ def dbInsertGnssObs(dbCursor, mountPoint, rtcmPackageId, messageType, data):
         messageType >= 1071 and messageType <= 1077
     ):
         satType = "G"
-    elif (messageType >= 1009 and messageType <= 1004) or (
+    elif (messageType >= 1009 and messageType <= 1012) or (
         messageType >= 1081 and messageType <= 1087
     ):
         satType = "R"
@@ -134,13 +147,12 @@ def dbInsertGnssObs(dbCursor, mountPoint, rtcmPackageId, messageType, data):
         if messageType % 10 == 5:
             codeFineScaling = pow(2, -24)
             phaseFineScaling = pow(2, -29)
+            snrScaling = 1
         elif messageType % 10 == 7:
             codeFineScaling = pow(2, -29)
             phaseFineScaling = pow(2, -31)
-
-        obsEpoch = data[0][2] / 1000.0
-        us = int(obsEpoch % 1 * 1000000)
-        obsEpochStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(obsEpoch))
+            snrScaling = pow(2, -4)
+        obsEpochStr = gnssEpochStr(messageType, data[0][2] / 1000.0)
         satSignals = rtcmData.msmSignalTypes(messageType, data[0][10])
         signalCount = len(satSignals)
         availSatMask = str(data[0][9])
@@ -158,62 +170,38 @@ def dbInsertGnssObs(dbCursor, mountPoint, rtcmPackageId, messageType, data):
                 if availObsMask[satNo * signalCount + signalNo] == "1":
                     obsCode = satRoughRange + data[2][availObsNo][0] * codeFineScaling
                     obsPhase = satRoughRange + data[2][availObsNo][1] * phaseFineScaling
-                    obsDoppler = satRoughRangeRate + data[2][availObsNo][5]
-                    obsSnr = data[2][availObsNo][4]
+                    obsLockTimeIndicator = data[2][availObsNo][2]
+                    obsSnr = data[2][availObsNo][4] * snrScaling
+                    obsDoppler = satRoughRangeRate + data[2][availObsNo][5] * 0.0001
                     allObs.append(
-                        [
+                        (
                             rtcmPackageId,
                             mountPoint,
                             obsEpochStr,
                             messageType,
-                            satId,
+                            satId[satNo],
                             satSignal,
                             obsCode,
                             obsPhase,
                             obsDoppler,
                             obsSnr,
-                        ]
+                            obsLockTimeIndicator,
+                        )
                     )
-                    # print(
-                    #     f"{satId[satNo]} {messageType}: {satSignal} "
-                    #     f"{sat} {data[2][availObsNo]} "
-                    # )
-                    # print(
-                    #     f"rtcmPackageId:{rtcmPackageId},"
-                    #     f"mountPoint:{mountPoint},"
-                    #     f"obsEpochStr:{obsEpochStr},"
-                    #     f"messageType:{messageType},"
-                    #     f"satId:{satId[satNo]},"
-                    #     f"satSignal:{satSignal},"
-                    #     f"obsCode:{obsCode},"
-                    #     f"obsPhase:{obsPhase},"
-                    #     f"obsDoppler:{obsDoppler},"
-                    #     f"obsSnr:{obsSnr}"
-                    # )
                     availObsNo += 1
-            # availObsNo += 1
-        print(allObs)
-        # try:
-        #     dbCursor.execute(
-        #         "INSERT INTO gnss_observations"
-        #         "(rtcm_package_id, mountpoint, obs_epoch, rtcm_msg_type, "
-        #         "sat_id, sat_signal, obs_code, obs_phase, obs_doppler, obs_snr) "
-        #         "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ",
-        #         (
-        #             rtcmPackageId,
-        #             mountPoint,
-        #             obsEpochStr,
-        #             messageType,
-        #             satId,
-        #             satSignal,
-        #             obsCode,
-        #             obsPhase,
-        #             obsDoppler,
-        #             obsSnr,
-        #         )
-        #     )
-        # except (Exception, Error) as error:
-        #     logging.error(f"Failed to insert and commit data to databse with: {error}")
+        # print(allObs)
+        try:
+            extras.execute_batch(
+                dbCursor,
+                "INSERT INTO gnss_observations"
+                "(rtcm_package_id, mountpoint, obs_epoch, rtcm_msg_type, "
+                "sat_id, sat_signal, obs_code, obs_phase, obs_doppler, "
+                "obs_snr, obs_lock_time_indicator) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ",
+                allObs,
+            )
+        except (Exception, Error) as error:
+            logging.error(f"Failed to insert and commit data to databse with: {error}")
 
 
 async def procRtcmStream(
@@ -241,8 +229,13 @@ async def procRtcmStream(
     if dbSettings:
         try:
             dbConnection = dbConnect(dbSettings)
-            dbCursor = dbConnection.cursor()
         except (Exception, Error) as error:
+            sleepTime = 5
+            if fail >= retry:
+                fail += 1
+                sleepTime = 5 * fail
+                if sleepTime > 300:
+                    sleepTime = 300
             logging.error(
                 "Failed to connect to database server: "
                 f"{dbSettings.database}@{dbSettings.host} "
@@ -250,7 +243,6 @@ async def procRtcmStream(
             )
             logging.error(f"Will retry database connection in {sleepTime} seconds!")
             if dbConnection:
-                dbCursor.close()
                 dbConnection.close()
             await asyncio.sleep(sleepTime)
             await procRtcmStream(casterSettings, mountPoint, dbSettings, fail)
@@ -260,7 +252,6 @@ async def procRtcmStream(
             rtcmFrame, timeStamp = await ntripstream.getRtcmFrame()
         except (ConnectionError, IOError):
             if dbConnection:
-                dbCursor.close()
                 dbConnection.close()
             if fail >= retry:
                 fail += 1
@@ -288,6 +279,7 @@ async def procRtcmStream(
             f"{mountPoint}: RTCM message #: {messageType}"
             f" '{rtcmMessage.messageDescription(messageType)}'."
         )
+        dbCursor = dbConnection.cursor()
         dbInsert(dbCursor, mountPoint, timeStamp, len(rtcmFrame), messageType, data)
     if dbConnection:
         dbCursor.close()

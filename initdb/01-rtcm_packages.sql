@@ -1,8 +1,8 @@
 CREATE TABLE IF NOT EXISTS rtcm_packages (
     rtcm_package_id SERIAL,
     receive_time TIMESTAMP WITHOUT TIME ZONE NOT NULL,
-    mountpoint varchar(50),
-    rtcm_obs_epoch NUMERIC(10, 3),
+    mountpoint VARCHAR(50),
+    rtcm_obs_epoch TIMESTAMP WITHOUT TIME ZONE,
     rtcm_msg_type SMALLINT NOT NULL,
     rtcm_msg_size INTEGER,
     rtcm_sat_count SMALLINT
