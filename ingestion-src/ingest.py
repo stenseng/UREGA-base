@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+RTCM ingestion for UREGA.
+
 @author: Lars Stenseng
 @mail: lars@stenseng.net
 """
@@ -14,7 +16,7 @@ from sys import exit
 from time import gmtime, strftime
 
 from ntripstreams import NtripStream, Rtcm3
-from psycopg2 import Error, connect
+from psycopg2 import Error, connect, extras
 from settings import CasterSettings, DbSettings
 
 
@@ -136,49 +138,61 @@ def dbInsertGnssObs(dbCursor, mountPoint, rtcmPackageId, messageType, data):
             codeFineScaling = pow(2, -29)
             phaseFineScaling = pow(2, -31)
 
-    obsEpoch = data[0][2] / 1000.0
-    us = int(obsEpoch % 1 * 1000000)
-    obsEpochStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(obsEpoch))
-    satSignals = rtcmData.msmSignalTypes(messageType, data[0][10])
-    satCount = len(data[1])
-    signalCount = len(satSignals)
-    availObsNo = 0
-    availObsMask = str(data[0][11])
-    for satNo, sat in enumerate(data[1]):
-        satRoughRange = sat[0] + sat[2] / 1024.0
-        satRoughRangeRate = sat[3]
-        for signalNo, satSignal in enumerate(satSignals):
-            if availObsMask[satNo * signalCount + signalNo] == "1":
-                print(
-                    f"messageType {messageType}: {data[0][11]} "
-                    f"{availObsNo} {satNo} {signalNo} "
-                    f"{len(data[2][availObsNo])} "
-                )
-                availObsNo += 1
-            satId = f"{satType}{satNo}"
-            # # obsCode = satRoughRange + data[2][satNo][signalNo][0] * codeFineScaling
-            # # obsPhase = satRoughRange + data[2][satNo][signalNo][1] * phaseFineScaling
-            # # obsDoppler = satRoughRangeRate + data[2][satNo][signalNo][5]
-            # # obsSnr = data[2][satNo][signalNo][4]
-            # obsCode = data[2][availObsNo][0]
-            # obsPhase = (
-            #     f"{len(data[2])} {len(data[2][satNo])} {data[2][satNo][availObsNo]}"
-            # )
-            # obsDoppler = data[0][-1]
-            # obsSnr = obsCode
-            # print(
-            #     f"rtcmPackageId:{rtcmPackageId},"
-            #     f"mountPoint:{mountPoint},"
-            #     f"obsEpochStr:{obsEpochStr},"
-            #     f"messageType:{messageType},"
-            #     f"satId:{satId},"
-            #     f"satSignal:{satSignal},"
-            #     f"obsCode:{obsCode},"
-            #     f"obsPhase:{obsPhase},"
-            #     f"obsDoppler:{obsDoppler},"
-            #     f"obsSnr:{obsSnr}"
-            # )
+        obsEpoch = data[0][2] / 1000.0
+        us = int(obsEpoch % 1 * 1000000)
+        obsEpochStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(obsEpoch))
+        satSignals = rtcmData.msmSignalTypes(messageType, data[0][10])
+        signalCount = len(satSignals)
+        availSatMask = str(data[0][9])
+        satId = []
+        allObs = []
+        for id in range(64):
+            if availSatMask[id] == "1":
+                satId.append(f"{satType}{id + 1:02d}")
+        availObsNo = 0
+        availObsMask = str(data[0][11])
+        for satNo, sat in enumerate(data[1]):
+            satRoughRange = sat[0] + sat[2] / 1024.0
+            satRoughRangeRate = sat[3]
+            for signalNo, satSignal in enumerate(satSignals):
+                if availObsMask[satNo * signalCount + signalNo] == "1":
+                    obsCode = satRoughRange + data[2][availObsNo][0] * codeFineScaling
+                    obsPhase = satRoughRange + data[2][availObsNo][1] * phaseFineScaling
+                    obsDoppler = satRoughRangeRate + data[2][availObsNo][5]
+                    obsSnr = data[2][availObsNo][4]
+                    allObs.append(
+                        [
+                            rtcmPackageId,
+                            mountPoint,
+                            obsEpochStr,
+                            messageType,
+                            satId,
+                            satSignal,
+                            obsCode,
+                            obsPhase,
+                            obsDoppler,
+                            obsSnr,
+                        ]
+                    )
+                    # print(
+                    #     f"{satId[satNo]} {messageType}: {satSignal} "
+                    #     f"{sat} {data[2][availObsNo]} "
+                    # )
+                    # print(
+                    #     f"rtcmPackageId:{rtcmPackageId},"
+                    #     f"mountPoint:{mountPoint},"
+                    #     f"obsEpochStr:{obsEpochStr},"
+                    #     f"messageType:{messageType},"
+                    #     f"satId:{satId[satNo]},"
+                    #     f"satSignal:{satSignal},"
+                    #     f"obsCode:{obsCode},"
+                    #     f"obsPhase:{obsPhase},"
+                    #     f"obsDoppler:{obsDoppler},"
+                    #     f"obsSnr:{obsSnr}"
+                    # )
+                    availObsNo += 1
             # availObsNo += 1
+        print(allObs)
         # try:
         #     dbCursor.execute(
         #         "INSERT INTO gnss_observations"
