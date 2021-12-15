@@ -1,0 +1,431 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 1,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "UYgXEmhnz"
+          },
+          "format": "time_series",
+          "group": [
+            {
+              "params": [
+                "1m",
+                "none"
+              ],
+              "type": "time"
+            }
+          ],
+          "metricColumn": "mountpoint",
+          "rawQuery": false,
+          "rawSql": "SELECT\n  $__timeGroupAlias(receive_time,1m),\n  mountpoint AS metric,\n  sum(rtcm_msg_size) AS \"rtcm_msg_size\"\nFROM rtcm_packages\nWHERE\n  $__timeFilter(receive_time)\nGROUP BY 1,2\nORDER BY 1,2",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "rtcm_msg_size"
+                ],
+                "type": "column"
+              },
+              {
+                "params": [
+                  "sum"
+                ],
+                "type": "aggregate"
+              },
+              {
+                "params": [
+                  "rtcm_msg_size"
+                ],
+                "type": "alias"
+              }
+            ]
+          ],
+          "table": "rtcm_packages",
+          "timeColumn": "receive_time",
+          "timeColumnType": "timestamp",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "title": "Received Data",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "UYgXEmhnz"
+          },
+          "format": "time_series",
+          "group": [
+            {
+              "params": [
+                "1m",
+                "none"
+              ],
+              "type": "time"
+            }
+          ],
+          "metricColumn": "mountpoint",
+          "rawQuery": false,
+          "rawSql": "SELECT\n  $__timeGroupAlias(obs_epoch,1m),\n  mountpoint AS metric,\n  avg(obs_snr) AS \"avg_snr\"\nFROM gnss_observations\nWHERE\n  $__timeFilter(obs_epoch)\nGROUP BY 1,2\nORDER BY 1,2",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "obs_snr"
+                ],
+                "type": "column"
+              },
+              {
+                "params": [
+                  "avg"
+                ],
+                "type": "aggregate"
+              },
+              {
+                "params": [
+                  "avg_snr"
+                ],
+                "type": "alias"
+              }
+            ]
+          ],
+          "table": "gnss_observations",
+          "timeColumn": "obs_epoch",
+          "timeColumnType": "timestamp",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            }
+          ]
+        }
+      ],
+      "title": "Average SNR",
+      "type": "timeseries"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "UYgXEmhnz"
+          },
+          "format": "time_series",
+          "group": [
+            {
+              "params": [
+                "1m",
+                "none"
+              ],
+              "type": "time"
+            }
+          ],
+          "metricColumn": "mountpoint",
+          "rawQuery": false,
+          "rawSql": "SELECT\n  $__timeGroupAlias(obs_epoch,1m),\n  mountpoint AS metric,\n  count(obs_lock_time_indicator) AS \"obs_lock_time_indicator\"\nFROM gnss_observations\nWHERE\n  $__timeFilter(obs_epoch) AND\n  obs_lock_time_indicator < 1\nGROUP BY 1,2\nORDER BY 1,2",
+          "refId": "A",
+          "select": [
+            [
+              {
+                "params": [
+                  "obs_lock_time_indicator"
+                ],
+                "type": "column"
+              },
+              {
+                "params": [
+                  "count"
+                ],
+                "type": "aggregate"
+              },
+              {
+                "params": [
+                  "obs_lock_time_indicator"
+                ],
+                "type": "alias"
+              }
+            ]
+          ],
+          "table": "gnss_observations",
+          "timeColumn": "obs_epoch",
+          "timeColumnType": "timestamp",
+          "where": [
+            {
+              "name": "$__timeFilter",
+              "params": [],
+              "type": "macro"
+            },
+            {
+              "datatype": "int4",
+              "name": "",
+              "params": [
+                "obs_lock_time_indicator",
+                "<",
+                "1"
+              ],
+              "type": "expression"
+            }
+          ]
+        }
+      ],
+      "title": "Cycle slips",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 33,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "GNSS overview",
+  "uid": "0Yg1QOh7z",
+  "version": 8,
+  "weekStart": ""
+}

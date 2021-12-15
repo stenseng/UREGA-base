@@ -40,6 +40,7 @@ services:
             - "3000:3000"
         volumes:
             - ./initgrafana:/etc/grafana/provisioning
+            - :/var/lib/grafana
 #            - /local/grafana:/var/lib/grafana
         logging:
             driver: "local"
