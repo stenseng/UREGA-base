@@ -11,7 +11,7 @@ import argparse
 import asyncio
 import logging
 from math import pow
-from signal import SIGINT, SIGTERM, signal
+from signal import ITIMER_REAL, SIGALRM, SIGINT, SIGTERM, setitimer, signal
 from sys import exit
 from time import gmtime, strftime, time
 
@@ -30,8 +30,24 @@ def procSigterm(signum, frame):
     exit(4)
 
 
-signal(SIGINT, procSigint)
-signal(SIGTERM, procSigterm)
+def watchdogHandler(signum, frame):
+    runningTasks = asyncio.all_tasks()
+    runningTaskNames = [runningTask.get_name() for runningTask in runningTasks]
+    if len(runningTasks) - 1 <= len(casterSettings.mountpoints):
+        wantedTaskNames = []
+        for wantedTask in casterSettings.mountpoints:
+            if wantedTask not in runningTaskNames:
+                wantedTaskNames.append(wantedTask)
+                tasks[wantedTask] = asyncio.create_task(
+                    procRtcmStream(
+                        casterSettings,
+                        wantedTask,
+                        dbSettings,
+                    ),
+                    name=wantedTask,
+                )
+    print(f"{time()}: Running/stopped tasks: {runningTaskNames}/{wantedTaskNames}")
+    return
 
 
 def gnssEpochStr(messageType: int, obsEpoch: float):
@@ -338,6 +354,16 @@ def dbConnect(dbSettings: DbSettings):
     return connection
 
 
+def main(dbSettings, casterSettings):
+    signal(SIGINT, procSigint)
+    signal(SIGTERM, procSigterm)
+    signal(SIGALRM, watchdogHandler)
+    setitimer(ITIMER_REAL, 0.2, 5)
+
+    asyncio.run(rtcmStreamTasks(casterSettings, dbSettings))
+
+
+tasks = {}
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -400,5 +426,4 @@ if __name__ == "__main__":
         dbSettings = None
     else:
         dbSettings = DbSettings()
-
-    asyncio.run(rtcmStreamTasks(casterSettings, dbSettings))
+    main(dbSettings, casterSettings)
