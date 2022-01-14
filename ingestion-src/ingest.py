@@ -46,7 +46,7 @@ def watchdogHandler(signum, frame):
                     ),
                     name=wantedTask,
                 )
-    print(f"{time()}: Running/stopped tasks: {runningTaskNames}/{wantedTaskNames}")
+                logging.warning(f"{wantedTask} RTCM stream restarted.")
     return
 
 
