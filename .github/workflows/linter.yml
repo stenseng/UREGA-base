@@ -50,10 +50,10 @@ jobs:
       - name: Lint Code Base
         uses: github/super-linter@v4
         env:
+          FILTER_REGEX_EXCLUDE: initgrafana/.*json
           VALIDATE_ALL_CODEBASE: true
           VALIDATE_PYTHON_MYPY: false
           VALIDATE_SQLFLUFF: false
           VALIDATE_KUBERNETES_KUBEVAL: false
           DEFAULT_BRANCH: main
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
