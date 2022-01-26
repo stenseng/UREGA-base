@@ -102,7 +102,27 @@ def watchdogHandler(signum: int, frame: FrameType) -> None:
     return
 
 
-def gnssEpochStr(messageType: int, obsEpoch: float):
+def gnssEpochStr(messageType: int, obsEpoch: float) -> str:
+    """
+    Construct a SQL suited date/time string from a GNSS observation epoch.
+
+    The date is adopted from the current computer date. To align the GNSS data with
+    UTC date, the GNSS epoch modolus 1 day is compared with computer time modolus 1 day.
+
+
+    Parameters
+    ----------
+    messageType : int
+        RTCM message type.
+    obsEpoch : float
+        DESCRIPTION.
+
+    Returns
+    -------
+    str
+        DESCRIPTION.
+
+    """
     now = time()
     nowSecOfDay = now % 86400
     nowSecOfDate = int(now - nowSecOfDay)
