@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS gnss_observations (
     obs_id SERIAL,
     rtcm_package_id  INTEGER,
-    obs_epoch TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    obs_epoch TIMESTAMP WITH TIME ZONE NOT NULL,
     rtcm_msg_type SMALLINT NOT NULL,
     mountpoint VARCHAR(50),
     sat_id CHAR(4),
