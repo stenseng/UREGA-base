@@ -14,23 +14,75 @@ from math import pow
 from signal import ITIMER_REAL, SIGALRM, SIGINT, SIGTERM, setitimer, signal
 from sys import exit
 from time import gmtime, strftime, time
+from typing import FrameType
 
 from ntripstreams import NtripStream, Rtcm3
 from psycopg2 import Error, connect, extras
 from settings import CasterSettings, DbSettings
 
 
-def procSigint(signum, frame):
+def procSigint(signum: int, frame: FrameType) -> None:
+    """
+    Signal handler for interrupt.
+
+    Parameters
+    ----------
+    signum : int
+        DESCRIPTION.
+    frame : FrameType
+        DESCRIPTION.
+
+    Returns
+    -------
+    None
+        DESCRIPTION.
+
+    """
     logging.warning("Received SIGINT. Shutting down, Adjø!")
     exit(3)
 
 
-def procSigterm(signum, frame):
+def procSigterm(signum: int, frame: FrameType) -> None:
+    """
+    Signal handler for terminate.
+
+    Parameters
+    ----------
+    signum : int
+        DESCRIPTION.
+    frame : FrameType
+        DESCRIPTION.
+
+    Returns
+    -------
+    None
+        DESCRIPTION.
+
+    """
     logging.warning("Received SIGTERM. Shutting down, Adjø!")
     exit(4)
 
 
-def watchdogHandler(signum, frame):
+def watchdogHandler(signum: int, frame: FrameType) -> None:
+    """
+    Signal handler for the watchdog.
+
+    The watchdog checks which asyncio tasks that are running and restarts requested
+    tasks.
+
+    Parameters
+    ----------
+    signum : int
+        DESCRIPTION.
+    frame : FrameType
+        DESCRIPTION.
+
+    Returns
+    -------
+    None
+        DESCRIPTION.
+
+    """
     runningTasks = asyncio.all_tasks()
     runningTaskNames = [runningTask.get_name() for runningTask in runningTasks]
     if len(runningTasks) - 1 <= len(casterSettings.mountpoints):
@@ -53,24 +105,31 @@ def watchdogHandler(signum, frame):
 def gnssEpochStr(messageType: int, obsEpoch: float):
     now = time()
     nowSecOfDay = now % 86400
+    nowSecOfDate = int(now - nowSecOfDay)
+
+    obsSecOfDay = int(obsEpoch % 86400)
+    us = int(obsEpoch % 1 * 1000000)
+
+    if (obsSecOfDay - nowSecOfDay) < -5 * 3600:
+        obsTime = nowSecOfDate + obsSecOfDay + 86400
+    else:
+        obsTime = nowSecOfDate + obsSecOfDay
     if (messageType >= 1009 and messageType <= 1012) or (
         messageType >= 1081 and messageType <= 1087
     ):
-        deltaTime = obsEpoch - nowSecOfDay - 3 * 3600
-    else:
-        deltaTime = obsEpoch % 86400 - nowSecOfDay
-    if deltaTime < 0:
-        obsTime = now + 86400 + deltaTime
-    else:
-        obsTime = now + deltaTime
-    us = int(obsEpoch % 1 * 1000000)
-    epochStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(obsTime))
+        obsTime = obsTime - 3 * 3600
+    logging.debug(
+        f"Msg:{messageType} CPU:{strftime(f'%Y-%m-%d %H:%M:%S.{us} z', gmtime(now))} "
+        f"obsTime:{strftime(f'%Y-%m-%d %H:%M:%S.{us} z', gmtime(obsTime))} "
+        f"timeDiff:{obsSecOfDay - nowSecOfDay}"
+    )
+    epochStr = strftime(f"%Y-%m-%d %H:%M:%S.{us} z", gmtime(obsTime))
     return epochStr
 
 
 def dbInsert(dbCursor, mountPoint, timeStamp, messageSize, messageType, data):
     us = int(timeStamp % 1 * 1000000)
-    timeStampStr = strftime(f"%Y-%m-%d %H:%M:%S.{us}", gmtime(timeStamp))
+    timeStampStr = strftime(f"%Y-%m-%d %H:%M:%S.{us} z", gmtime(timeStamp))
     if (
         (messageType >= 1001 and messageType <= 1004)
         or (messageType >= 1009 and messageType <= 1012)
@@ -130,7 +189,11 @@ def dbInsertRtcmInfo(
             ),
         )
         rtcmPackageId = dbCursor.fetchone()[0]
-        logging.debug(f"Inserted package with id: {rtcmPackageId} into database.")
+        dbCursor.connection.commit()
+        logging.debug(
+            f"Inserted info package with id: {rtcmPackageId} "
+            f"and timestamp {timeStampStr} into database."
+        )
     except (Exception, Error) as error:
         logging.error(
             f"Failed to insert and commit data to databse with: {error}"
@@ -205,16 +268,20 @@ def dbInsertGnssObs(dbCursor, mountPoint, rtcmPackageId, messageType, data):
                         )
                     )
                     availObsNo += 1
-        # print(allObs)
         try:
-            extras.execute_batch(
+            extras.execute_values(
                 dbCursor,
-                "INSERT INTO gnss_observations"
+                "INSERT INTO gnss_observations "
                 "(rtcm_package_id, mountpoint, obs_epoch, rtcm_msg_type, "
                 "sat_id, sat_signal, obs_code, obs_phase, obs_doppler, "
                 "obs_snr, obs_lock_time_indicator) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ",
+                "VALUES %s",
                 allObs,
+            )
+            dbCursor.connection.commit()
+            logging.debug(
+                f"Inserted obs package with id: {rtcmPackageId} "
+                f"and timestamp {obsEpochStr} into database."
             )
         except (Exception, Error) as error:
             logging.error(f"Failed to insert and commit data to databse with: {error}")
@@ -228,6 +295,7 @@ async def procRtcmStream(
     retry: int = 3,
 ):
     dbConnection = None
+    dbCursor = None
     ntripstream = NtripStream()
     rtcmMessage = Rtcm3()
     try:
@@ -245,6 +313,7 @@ async def procRtcmStream(
     if dbSettings:
         try:
             dbConnection = dbConnect(dbSettings)
+            dbCursor = dbConnection.cursor()
         except (Exception, Error) as error:
             sleepTime = 5
             if fail >= retry:
@@ -259,6 +328,7 @@ async def procRtcmStream(
             )
             logging.error(f"Will retry database connection in {sleepTime} seconds!")
             if dbConnection:
+                dbCursor.close()
                 dbConnection.close()
             await asyncio.sleep(sleepTime)
             await procRtcmStream(casterSettings, mountPoint, dbSettings, fail)
@@ -268,6 +338,7 @@ async def procRtcmStream(
             rtcmFrame, timeStamp = await ntripstream.getRtcmFrame()
         except (ConnectionError, IOError):
             if dbConnection:
+                dbCursor.close()
                 dbConnection.close()
             if fail >= retry:
                 fail += 1
@@ -295,7 +366,6 @@ async def procRtcmStream(
             f"{mountPoint}: RTCM message #: {messageType}"
             f" '{rtcmMessage.messageDescription(messageType)}'."
         )
-        dbCursor = dbConnection.cursor()
         dbInsert(dbCursor, mountPoint, timeStamp, len(rtcmFrame), messageType, data)
     if dbConnection:
         dbCursor.close()
@@ -350,7 +420,6 @@ def dbConnect(dbSettings: DbSettings):
         port=dbSettings.port,
         database=dbSettings.database,
     )
-    connection.autocommit = True
     return connection
 
 
