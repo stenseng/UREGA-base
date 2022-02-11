@@ -10,11 +10,11 @@ RTCM ingestion for UREGA.
 import argparse
 import asyncio
 import logging
+import typing
 from math import pow
 from signal import ITIMER_REAL, SIGALRM, SIGINT, SIGTERM, setitimer, signal
 from sys import exit
 from time import gmtime, strftime, time
-import typing
 
 from ntripstreams import NtripStream, Rtcm3
 from psycopg2 import Error, connect, extras
