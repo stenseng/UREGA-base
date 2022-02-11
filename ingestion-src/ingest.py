@@ -14,14 +14,14 @@ from math import pow
 from signal import ITIMER_REAL, SIGALRM, SIGINT, SIGTERM, setitimer, signal
 from sys import exit
 from time import gmtime, strftime, time
-from typing import FrameType
+import typing
 
 from ntripstreams import NtripStream, Rtcm3
 from psycopg2 import Error, connect, extras
 from settings import CasterSettings, DbSettings
 
 
-def procSigint(signum: int, frame: FrameType) -> None:
+def procSigint(signum: int, frame: typing.types.FrameType) -> None:
     """
     Signal handler for interrupt.
 
@@ -42,7 +42,7 @@ def procSigint(signum: int, frame: FrameType) -> None:
     exit(3)
 
 
-def procSigterm(signum: int, frame: FrameType) -> None:
+def procSigterm(signum: int, frame: typing.types.FrameType) -> None:
     """
     Signal handler for terminate.
 
@@ -63,7 +63,7 @@ def procSigterm(signum: int, frame: FrameType) -> None:
     exit(4)
 
 
-def watchdogHandler(signum: int, frame: FrameType) -> None:
+def watchdogHandler(signum: int, frame: typing.types.FrameType) -> None:
     """
     Signal handler for the watchdog.
 
