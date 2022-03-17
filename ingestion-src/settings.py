@@ -15,8 +15,10 @@ class DbSettings:
     host: str = "timescaledb"
     port: str = "5432"
     database: str = "UREGA"
+    storeObservations: bool = False
 
 
+@dataclass
 @dataclass
 class CasterSettings:
     casterUrl: str = "http://ntrip.gnss.org:2101"

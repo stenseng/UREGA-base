@@ -28,14 +28,13 @@ def procSigint(signum: int, frame: typing.types.FrameType) -> None:
     Parameters
     ----------
     signum : int
-        DESCRIPTION.
+        System specific signal number. Not intended for direct user calls.
     frame : FrameType
-        DESCRIPTION.
+        System specific frame type. Not intended for direct user calls.
 
     Returns
     -------
     None
-        DESCRIPTION.
 
     """
     logging.warning("Received SIGINT. Shutting down, Adjø!")
@@ -49,14 +48,13 @@ def procSigterm(signum: int, frame: typing.types.FrameType) -> None:
     Parameters
     ----------
     signum : int
-        DESCRIPTION.
+        System specific signal number. Not intended for direct user calls.
     frame : FrameType
-        DESCRIPTION.
+        System specific frame type. Not intended for direct user calls.
 
     Returns
     -------
     None
-        DESCRIPTION.
 
     """
     logging.warning("Received SIGTERM. Shutting down, Adjø!")
@@ -68,19 +66,18 @@ def watchdogHandler(signum: int, frame: typing.types.FrameType) -> None:
     Signal handler for the watchdog.
 
     The watchdog checks which asyncio tasks that are running and restarts requested
-    tasks.
+    tasks if they have stopped/died/disapeared.
 
     Parameters
     ----------
     signum : int
-        DESCRIPTION.
+        System specific signal number. Not intended for direct user calls.
     frame : FrameType
-        DESCRIPTION.
+        System specific frame type. Not intended for direct user calls.
 
     Returns
     -------
     None
-        DESCRIPTION.
 
     """
     runningTasks = asyncio.all_tasks()
@@ -115,12 +112,12 @@ def gnssEpochStr(messageType: int, obsEpoch: float) -> str:
     messageType : int
         RTCM message type.
     obsEpoch : float
-        DESCRIPTION.
+        Epoch in sec using the GNSS constellation timesystem.
 
     Returns
     -------
     str
-        DESCRIPTION.
+        SQL type date/time string.
 
     """
     now = time()
@@ -147,7 +144,42 @@ def gnssEpochStr(messageType: int, obsEpoch: float) -> str:
     return epochStr
 
 
-def dbInsert(dbCursor, mountPoint, timeStamp, messageSize, messageType, data):
+def dbInsert(
+    dbCursor,
+    dbSettings: DbSettings,
+    mountPoint: str,
+    timeStamp: str,
+    messageSize: int,
+    messageType: int,
+    data,
+) -> None:
+    """
+    Insert data and metadata into the database.
+
+    Parameters
+    ----------
+    dbCursor : connect.Cursor
+        DESCRIPTION.
+    dbSettings : DbSettings
+        DESCRIPTION.
+    mountPoint : str
+        DESCRIPTION.
+    timeStamp : str
+        DESCRIPTION.
+    messageSize : int
+        DESCRIPTION.
+    messageType : int
+        DESCRIPTION.
+    data : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None
+        DESCRIPTION.
+
+    """
+
     us = int(timeStamp % 1 * 1000000)
     timeStampStr = strftime(f"%Y-%m-%d %H:%M:%S.{us} z", gmtime(timeStamp))
     if (
@@ -171,7 +203,8 @@ def dbInsert(dbCursor, mountPoint, timeStamp, messageSize, messageType, data):
             obsEpochStr,
             satCount,
         )
-        dbInsertGnssObs(dbCursor, mountPoint, rtcmPackageId, messageType, data)
+        if dbSettings.storeObservations:
+            dbInsertGnssObs(dbCursor, mountPoint, rtcmPackageId, messageType, data)
     else:
         rtcmPackageId = dbInsertRtcmInfo(
             dbCursor,
@@ -191,7 +224,7 @@ def dbInsertRtcmInfo(
     messageSize: int,
     obsEpochStr: str = None,
     satCount: int = None,
-):
+) -> int:
     rtcmPackageId = None
     try:
         dbCursor.execute(
@@ -223,7 +256,13 @@ def dbInsertRtcmInfo(
     return rtcmPackageId
 
 
-def dbInsertGnssObs(dbCursor, mountPoint, rtcmPackageId, messageType, data):
+def dbInsertGnssObs(
+    dbCursor,
+    mountPoint: str,
+    rtcmPackageId: int,
+    messageType: int,
+    data,
+) -> None:
     rtcmData = Rtcm3()
     if (messageType >= 1001 and messageType <= 1004) or (
         messageType >= 1071 and messageType <= 1077
@@ -313,7 +352,7 @@ async def procRtcmStream(
     dbSettings: DbSettings = None,
     fail: int = 0,
     retry: int = 3,
-):
+) -> None:
     dbConnection = None
     dbCursor = None
     ntripstream = NtripStream()
@@ -386,20 +425,30 @@ async def procRtcmStream(
             f"{mountPoint}: RTCM message #: {messageType}"
             f" '{rtcmMessage.messageDescription(messageType)}'."
         )
-        dbInsert(dbCursor, mountPoint, timeStamp, len(rtcmFrame), messageType, data)
+        dbInsert(
+            dbCursor,
+            dbSettings,
+            mountPoint,
+            timeStamp,
+            len(rtcmFrame),
+            messageType,
+            data,
+        )
     if dbConnection:
         dbCursor.close()
         dbConnection.close()
 
 
-async def rtcmStreamTasks(casterSettings, dbConnection):
+async def rtcmStreamTasks(
+    casterSettings: CasterSettings, dbSettings: DbSettings
+) -> None:
     tasks = {}
     for mountpoint in casterSettings.mountpoints:
         tasks[mountpoint] = asyncio.create_task(
             procRtcmStream(
                 casterSettings,
                 mountpoint,
-                dbConnection,
+                dbSettings=dbSettings,
             ),
             name=mountpoint,
         )
@@ -409,7 +458,7 @@ async def rtcmStreamTasks(casterSettings, dbConnection):
 
 async def getMountpoints(
     casterSettings: CasterSettings, sleepTime: int = 30, fail: int = 0
-):
+) -> list[str]:
     ntripstream = NtripStream()
     mountpoints = []
     try:
@@ -428,7 +477,6 @@ async def getMountpoints(
             sourceCols = row.split(sep=";")
             if sourceCols[0] == "STR":
                 mountpoints.append(sourceCols[1])
-        # casterSettings.mountpoints = mountpoints
         return mountpoints
 
 
@@ -443,7 +491,7 @@ def dbConnect(dbSettings: DbSettings):
     return connection
 
 
-def main(dbSettings, casterSettings):
+def main(casterSettings: CasterSettings, dbSettings: DbSettings):
     signal(SIGINT, procSigint)
     signal(SIGTERM, procSigterm)
     signal(SIGALRM, watchdogHandler)
@@ -460,6 +508,12 @@ if __name__ == "__main__":
         "--check",
         action="store_true",
         help="Check connection to Ntripcaster without committing data to database.",
+    )
+    parser.add_argument(
+        "-o",
+        "--obs",
+        action="store_true",
+        help="Committing GNSS observations to database. Default only stores metadata.",
     )
     parser.add_argument(
         "-m",
@@ -515,4 +569,6 @@ if __name__ == "__main__":
         dbSettings = None
     else:
         dbSettings = DbSettings()
-    main(dbSettings, casterSettings)
+        if args.obs:
+            dbSettings.storeObservations = True
+    main(casterSettings, dbSettings)
