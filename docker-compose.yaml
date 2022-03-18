@@ -51,8 +51,8 @@ services:
 
     ingest:
         build:
-          context: .
-          dockerfile: Dockerfile-ingest
+            context: .
+            dockerfile: Dockerfile-ingest
         depends_on:
             - timescaledb
         logging:
