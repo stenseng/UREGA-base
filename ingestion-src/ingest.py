@@ -83,7 +83,7 @@ def watchdogHandler(signum: int, frame: typing.types.FrameType) -> None:
     runningTasks = asyncio.all_tasks()
     runningTaskNames = [runningTask.get_name() for runningTask in runningTasks]
     if len(runningTasks) - 1 <= len(casterSettings.mountpoints):
-        logging.warning(
+        logging.debug(
             f"{runningTaskNames} tasks running, {casterSettings.mountpoints} wanted."
         )
         wantedTaskNames = []
@@ -247,7 +247,7 @@ def dbInsertRtcmInfo(
         dbCursor.connection.commit()
         logging.debug(
             f"Inserted info package with id: {rtcmPackageId} "
-            f"and timestamp {timeStampStr} into database."
+            f"and timestamp {timeStampStr} into database table rtcm_packages."
         )
     except (Exception, Error) as error:
         logging.error(
@@ -348,7 +348,7 @@ def dbInsertGnssObs(
             dbCursor.connection.commit()
             logging.debug(
                 f"Inserted obs package with id: {rtcmPackageId} "
-                f"and timestamp {obsEpochStr} into database."
+                f"and timestamp {obsEpochStr} into database table {table}_observations."
             )
         except (Exception, Error) as error:
             logging.error(f"Failed to insert and commit data to databse with: {error}")
