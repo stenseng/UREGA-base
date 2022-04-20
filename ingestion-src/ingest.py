@@ -83,6 +83,9 @@ def watchdogHandler(signum: int, frame: typing.types.FrameType) -> None:
     runningTasks = asyncio.all_tasks()
     runningTaskNames = [runningTask.get_name() for runningTask in runningTasks]
     if len(runningTasks) - 1 <= len(casterSettings.mountpoints):
+        logging.warning(
+            f"{runningTaskNames} tasks running, {casterSettings.mountpoints} wanted."
+        )
         wantedTaskNames = []
         for wantedTask in casterSettings.mountpoints:
             if wantedTask not in runningTaskNames:
@@ -179,7 +182,6 @@ def dbInsert(
         DESCRIPTION.
 
     """
-
     us = int(timeStamp % 1 * 1000000)
     timeStampStr = strftime(f"%Y-%m-%d %H:%M:%S.{us} z", gmtime(timeStamp))
     if (
@@ -268,18 +270,24 @@ def dbInsertGnssObs(
         messageType >= 1071 and messageType <= 1077
     ):
         satType = "G"
+        table = "gps"
     elif (messageType >= 1009 and messageType <= 1012) or (
         messageType >= 1081 and messageType <= 1087
     ):
         satType = "R"
+        table = "glonass"
     elif messageType >= 1091 and messageType <= 1097:
         satType = "E"
+        table = "galileo"
     elif messageType >= 1101 and messageType <= 1107:
         satType = "S"
+        table = "sbas"
     elif messageType >= 1111 and messageType <= 1117:
         satType = "J"
+        table = "qzss"
     elif messageType >= 1121 and messageType <= 1127:
         satType = "C"
+        table = "beidou"
 
     if messageType >= 1071 and messageType <= 1127:
         if messageType % 10 == 5:
@@ -330,7 +338,7 @@ def dbInsertGnssObs(
         try:
             extras.execute_values(
                 dbCursor,
-                "INSERT INTO gnss_observations "
+                f"INSERT INTO {table}_observations "
                 "(rtcm_package_id, mountpoint, obs_epoch, rtcm_msg_type, "
                 "sat_id, sat_signal, obs_code, obs_phase, obs_doppler, "
                 "obs_snr, obs_lock_time_indicator) "
@@ -500,8 +508,12 @@ def main(casterSettings: CasterSettings, dbSettings: DbSettings):
     asyncio.run(rtcmStreamTasks(casterSettings, dbSettings))
 
 
-tasks = {}
 if __name__ == "__main__":
+    global casterSettings
+    global dbSettings
+    global tasks
+    tasks = {}
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-c",
@@ -558,7 +570,6 @@ if __name__ == "__main__":
         logging.basicConfig(
             level=logLevel, format="%(asctime)s;%(levelname)s;%(message)s"
         )
-
     casterSettings = CasterSettings()
     if args.mountpoint:
         casterSettings.mountpoints = args.mountpoint

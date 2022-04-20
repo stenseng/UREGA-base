@@ -236,7 +236,7 @@
           ],
           "metricColumn": "mountpoint",
           "rawQuery": false,
-          "rawSql": "SELECT\n  $__timeGroupAlias(obs_epoch,1m),\n  mountpoint AS metric,\n  avg(obs_snr) AS \"avg_snr\"\nFROM gnss_observations\nWHERE\n  $__timeFilter(obs_epoch)\nGROUP BY 1,2\nORDER BY 1,2",
+          "rawSql": "SELECT\n  $__timeGroupAlias(obs_epoch,1m),\n  mountpoint AS metric,\n  avg(obs_snr) AS \"avg_snr\"\nFROM gps_observations\nWHERE\n  $__timeFilter(obs_epoch)\nGROUP BY 1,2\nORDER BY 1,2",
           "refId": "A",
           "select": [
             [
@@ -260,7 +260,7 @@
               }
             ]
           ],
-          "table": "gnss_observations",
+          "table": "gps_observations",
           "timeColumn": "obs_epoch",
           "timeColumnType": "timestamp",
           "where": [
@@ -361,7 +361,7 @@
           ],
           "metricColumn": "mountpoint",
           "rawQuery": false,
-          "rawSql": "SELECT\n  $__timeGroupAlias(obs_epoch,1m),\n  mountpoint AS metric,\n  count(obs_lock_time_indicator) AS \"obs_lock_time_indicator\"\nFROM gnss_observations\nWHERE\n  $__timeFilter(obs_epoch) AND\n  obs_lock_time_indicator < 1\nGROUP BY 1,2\nORDER BY 1,2",
+          "rawSql": "SELECT\n  $__timeGroupAlias(obs_epoch,1m),\n  mountpoint AS metric,\n  count(obs_lock_time_indicator) AS \"obs_lock_time_indicator\"\nFROM gps_observations\nWHERE\n  $__timeFilter(obs_epoch) AND\n  obs_lock_time_indicator < 1\nGROUP BY 1,2\nORDER BY 1,2",
           "refId": "A",
           "select": [
             [
@@ -385,7 +385,7 @@
               }
             ]
           ],
-          "table": "gnss_observations",
+          "table": "gps_observations",
           "timeColumn": "obs_epoch",
           "timeColumnType": "timestamp",
           "where": [

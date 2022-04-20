@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS gnss_observations (
+CREATE TABLE IF NOT EXISTS sbas_observations (
     obs_id SERIAL,
     rtcm_package_id  INTEGER,
     obs_epoch TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -13,6 +13,6 @@ CREATE TABLE IF NOT EXISTS gnss_observations (
     obs_lock_time_indicator INTEGER
 );
 
-SELECT create_hypertable('gnss_observations', 'obs_epoch', 'mountpoint', 2);
-CREATE INDEX ON gnss_observations(mountpoint, sat_id, sat_signal, obs_epoch DESC);
-CREATE INDEX ON gnss_observations(mountpoint, rtcm_msg_type, obs_epoch DESC);
+SELECT create_hypertable('sbas_observations', 'obs_epoch', 'mountpoint', 2);
+CREATE INDEX ON sbas_observations(mountpoint, sat_id, sat_signal, obs_epoch DESC);
+CREATE INDEX ON sbas_observations(mountpoint, rtcm_msg_type, obs_epoch DESC);
