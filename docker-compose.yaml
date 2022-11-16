@@ -28,8 +28,8 @@ services:
         logging:
             driver: "local"
             options:
-                max-file: 10
-                max-size: 10
+                max-file: "10"
+                max-size: "10m"
         restart: unless-stopped
 
     grafana:
@@ -51,8 +51,8 @@ services:
         logging:
             driver: "local"
             options:
-                max-file: 10
-                max-size: 10
+                max-file: "10"
+                max-size: "10m"
         restart: unless-stopped
 
     ingest:
@@ -64,6 +64,6 @@ services:
         logging:
             driver: "local"
             options:
-                max-file: 10
-                max-size: 10
+                max-file: "10"
+                max-size: "10m"
         restart: unless-stopped
