@@ -5,23 +5,22 @@
 @mail: lars@stenseng.net
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
 class DbSettings:
-    user: str = "postgres"
-    password: str = "ShouldB3Secre1Ss0d0Something"
-    host: str = "timescaledb"
-    port: str = "5432"
-    database: str = "UREGA"
-    storeObservations: bool = False
+    host: str = None
+    port: int = None
+    database: str = None
+    user: str = None
+    password: str = None
+    storeObservations: bool = None
 
 
-@dataclass
 @dataclass
 class CasterSettings:
-    casterUrl: str = "http://ntrip.gnss.org:2101"
-    user: str = "ingest"
-    password: str = "ingest"
-    mountpoints = []
+    casterUrl: str = None
+    user: str = None
+    password: str = None
+    mountpoints: list[str] = field(default_factory=lambda: [])

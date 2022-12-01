@@ -7,10 +7,11 @@ RTCM ingestion for UREGA.
 @mail: lars@stenseng.net
 """
 
-import argparse
 import asyncio
 import logging
 import typing
+from argparse import ArgumentParser
+from configparser import ConfigParser
 from math import pow
 from signal import ITIMER_REAL, SIGALRM, SIGINT, SIGTERM, setitimer, signal
 from sys import exit
@@ -514,24 +515,19 @@ if __name__ == "__main__":
     global tasks
     tasks = {}
 
-    parser = argparse.ArgumentParser()
+    parser = ArgumentParser()
     parser.add_argument(
-        "-c",
-        "--check",
+        "-t",
+        "--test",
         action="store_true",
-        help="Check connection to Ntripcaster without committing data to database.",
-    )
-    parser.add_argument(
-        "-o",
-        "--obs",
-        action="store_true",
-        help="Committing GNSS observations to database. Default only stores metadata.",
+        help="Test connection to Ntripcaster without committing data to database.",
     )
     parser.add_argument(
         "-m",
         "--mountpoint",
         action="append",
-        help="Name of mountpoint without leading / (e.g. PNT1).",
+        help="Name of mountpoint without leading / (e.g. MPT1). "
+        + "Overrides mountpoint list in ingest.conf",
     )
     parser.add_argument(
         "-1",
@@ -542,6 +538,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-l",
         "--logfile",
+        action="store",
         help="Log to file. Default output is terminal.",
     )
     parser.add_argument(
@@ -552,6 +549,10 @@ if __name__ == "__main__":
         help="Increase verbosity level.",
     )
     args = parser.parse_args()
+    config = ConfigParser()
+
+    casterSettings = CasterSettings()
+    dbSettings = DbSettings()
 
     logLevel = logging.ERROR
     if args.verbosity == 1:
@@ -570,16 +571,28 @@ if __name__ == "__main__":
         logging.basicConfig(
             level=logLevel, format="%(asctime)s;%(levelname)s;%(message)s"
         )
-    casterSettings = CasterSettings()
+
+    config.read_file(open("/app/config/ingest.conf", mode="r"))
+    casterSettings.casterUrl = config["CasterSettings"]["casterUrl"]
+    casterSettings.user = config["CasterSettings"]["user"]
+    casterSettings.password = config["CasterSettings"]["password"]
+    casterSettings.mountpoints = list(
+        map(str.strip, config["CasterSettings"]["mountpoints"].split(","))
+    )
+    if casterSettings.mountpoints == [""]:
+        casterSettings.mountpoints = []
+
+    dbSettings.host = config["DbSettings"]["host"]
+    dbSettings.port = config.getint("DbSettings", "port")
+    dbSettings.database = config["DbSettings"]["database"]
+    dbSettings.user = config["DbSettings"]["user"]
+    dbSettings.password = config["DbSettings"]["password"]
+    dbSettings.storeObservations = config.getboolean("DbSettings", "storeObservations")
     if args.mountpoint:
         casterSettings.mountpoints = args.mountpoint
     if casterSettings.mountpoints == []:
         casterSettings.mountpoints = asyncio.run(getMountpoints(casterSettings))
     logging.debug(f"Using mountpoints: {casterSettings.mountpoints}")
-    if args.check:
+    if args.test:
         dbSettings = None
-    else:
-        dbSettings = DbSettings()
-        if args.obs:
-            dbSettings.storeObservations = True
     main(casterSettings, dbSettings)
